@@ -10,7 +10,9 @@ _bwrap() {
 	# Please keep sorted in LC_ALL=C order
 	local boolean_options="
 		--as-pid-1
+		--assert-userns-disabled
 		--clearenv
+		--disable-userns
 		--help
 		--new-session
 		--unshare-all
@@ -28,7 +30,9 @@ _bwrap() {
 	# Please keep sorted in LC_ALL=C order
 	local options_with_args="
 		$boolean_optons
+		--add-seccomp-fd
 		--args
+		--argv0
 		--bind
 		--bind-data
 		--block-fd
@@ -53,6 +57,7 @@ _bwrap() {
 		--ro-bind
 		--seccomp
 		--setenv
+		--size
 		--symlink
 		--sync-fd
 		--uid
@@ -60,11 +65,11 @@ _bwrap() {
 		--userns-block-fd
 	"
 
-	if [[ "$cur" == -* ]]; then
-	    COMPREPLY=( $( compgen -W "$boolean_options $options_with_args" -- "$cur" ) )
-	fi
+    if [[ "$cur" == -* ]]; then
+        COMPREPLY=( $( compgen -W "$boolean_options $options_with_args" -- "$cur" ) )
+    fi
 
-	return 0
+    return 0
 }
 complete -F _bwrap bwrap
 

@@ -4,6 +4,7 @@
 # Add non-bubblewrap-specific code to libtest-core.sh instead.
 #
 # Copyright (C) 2017 Colin Walters <walters@verbum.org>
+# SPDX-License-Identifier: LGPL-2.0-or-later
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -41,11 +42,11 @@ PATH="$PATH:/usr/sbin:/sbin"
 
 tempdir=$(mktemp -d /var/tmp/tap-test.XXXXXX)
 touch "${tempdir}/.testtmp"
-function cleanup () {
+cleanup() {
     if test -n "${TEST_SKIP_CLEANUP:-}"; then
         echo "Skipping cleanup of ${tempdir}"
     elif test -f "${tempdir}/.testtmp"; then
-        rm "${tempdir}" -rf
+        rm -rf "${tempdir}"
     fi
 }
 trap cleanup EXIT
@@ -93,9 +94,10 @@ else
     BWRAP_RO_HOST_ARGS="--ro-bind /usr /usr
               --ro-bind /etc /etc
               --ro-bind /bin /bin
-              --ro-bind /lib /lib
+              --ro-bind-try /lib /lib
               --ro-bind-try /lib64 /lib64
-              --ro-bind /sbin /sbin
+              --ro-bind-try /sbin /sbin
+              --ro-bind-try /nix/store /nix/store
               --dir /var/tmp
               --proc /proc
               --dev /dev"

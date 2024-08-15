@@ -6,7 +6,7 @@ etc. focus on providing infrastructure for system administrators and
 orchestration tools (e.g. Kubernetes) to run containers.
 
 These tools are not suitable to give to unprivileged users, because it
-is trivial to turn such access into to a fully privileged root shell
+is trivial to turn such access into a fully privileged root shell
 on the host.
 
 User namespaces
@@ -31,12 +31,12 @@ user namespaces.  Emphasis on subset - specifically relevant to the
 above CVE, bubblewrap does not allow control over iptables.
 
 The original bubblewrap code existed before user namespaces - it inherits code from
-[xdg-app helper](https://cgit.freedesktop.org/xdg-app/xdg-app/tree/common/xdg-app-helper.c)
+[xdg-app helper](https://cgit.freedesktop.org/xdg-app/xdg-app/tree/common/xdg-app-helper.c?id=4c3bf179e2e4a2a298cd1db1d045adaf3f564532)
 which in turn distantly derives from
 [linux-user-chroot](https://git.gnome.org/browse/linux-user-chroot).
 
-Security
---------
+System security
+---------------
 
 The maintainers of this tool believe that it does not, even when used
 in combination with typical software installed on that distribution,
@@ -46,6 +46,30 @@ in user to perform denial of service attacks, however.
 In particular, bubblewrap uses `PR_SET_NO_NEW_PRIVS` to turn off
 setuid binaries, which is the [traditional way](https://en.wikipedia.org/wiki/Chroot#Limitations) to get out of things
 like chroots.
+
+Sandbox security
+----------------
+
+bubblewrap is a tool for constructing sandbox environments.
+bubblewrap is not a complete, ready-made sandbox with a specific security
+policy.
+
+Some of bubblewrap's use-cases want a security boundary between the sandbox
+and the real system; other use-cases want the ability to change the layout of
+the filesystem for processes inside the sandbox, but do not aim to be a
+security boundary.
+As a result, the level of protection between the sandboxed processes and
+the host system is entirely determined by the arguments passed to
+bubblewrap.
+
+Whatever program constructs the command-line arguments for bubblewrap
+(often a larger framework like Flatpak, libgnome-desktop, sandwine
+or an ad-hoc script) is responsible for defining its own security model,
+and choosing appropriate bubblewrap command-line arguments to implement
+that security model.
+
+Some aspects of sandbox security that require particular care are described
+in the [Limitations](#limitations) section below.
 
 Users
 -----
@@ -62,6 +86,31 @@ clusters.  Having the ability for unprivileged users to use container
 features would make it significantly easier to do interactive
 debugging scenarios and the like.
 
+Installation
+------------
+
+bubblewrap is available in the package repositories of the most Linux distributions
+and can be installed from there.
+
+If you need to build bubblewrap from source, you can do this with meson or autotools.
+
+meson:
+
+```
+meson _builddir
+meson compile -C _builddir
+meson test -C _builddir
+meson install -C _builddir
+```
+
+autotools:
+
+```
+./autogen.sh
+make
+sudo make install
+```
+
 Usage
 -----
 
@@ -77,7 +126,14 @@ source code, but here's a trimmed down version which runs
 a new shell reusing the host's `/usr`.
 
 ```
-bwrap --ro-bind /usr /usr --symlink usr/lib64 /lib64 --proc /proc --dev /dev --unshare-pid bash
+bwrap \
+    --ro-bind /usr /usr \
+    --symlink usr/lib64 /lib64 \
+    --proc /proc \
+    --dev /dev \
+    --unshare-pid \
+    --new-session \
+    bash
 ```
 
 This is an incomplete example, but useful for purposes of
@@ -114,10 +170,39 @@ UTS namespace ([CLONE_NEWUTS](http://linux.die.net/man/2/clone)): The sandbox wi
 
 Seccomp filters: You can pass in seccomp filters that limit which syscalls can be done in the sandbox. For more information, see [Seccomp](https://en.wikipedia.org/wiki/Seccomp).
 
+Limitations
+-----------
+
+As noted in the [Sandbox security](#sandbox-security) section above,
+the level of protection between the sandboxed processes and the host system
+is entirely determined by the arguments passed to bubblewrap.
+Some aspects that require special care are noted here.
+
+- If you are not filtering out `TIOCSTI` commands using seccomp filters,
+argument `--new-session` is needed to protect against out-of-sandbox
+command execution
+(see [CVE-2017-5226](https://github.com/containers/bubblewrap/issues/142)).
+
+- Everything mounted into the sandbox can potentially be used to escalate
+privileges.
+For example, if you bind a D-Bus socket into the sandbox, it can be used to
+execute commands via systemd. You can use
+[xdg-dbus-proxy](https://github.com/flatpak/xdg-dbus-proxy) to filter
+D-Bus communication.
+
+- Some applications deploy their own sandboxing mechanisms, and these can be
+restricted by the constraints imposed by bubblewrap's sandboxing.
+For example, some web browsers which configure their child proccesses via
+seccomp to not have access to the filesystem. If you limit the syscalls and
+don't allow the seccomp syscall, a browser cannot apply these restrictions.
+Similarly, if these rules were compiled into a file that is not available in
+the sandbox, the browser cannot load these rules from this file and cannot
+apply these restrictions.
+
 Related project comparison: Firejail
 ------------------------------------
 
-[Firejail](https://github.com/netblue30/firejail/tree/master/src/firejail)
+[Firejail](https://github.com/netblue30/firejail/tree/HEAD/src/firejail)
 is similar to Flatpak before bubblewrap was split out in that it combines
 a setuid tool with a lot of desktop-specific sandboxing features.  For
 example, Firejail knows about Pulseaudio, whereas bubblewrap does not.

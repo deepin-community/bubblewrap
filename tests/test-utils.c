@@ -1,7 +1,7 @@
 /*
  * Copyright © 2019-2021 Collabora Ltd.
  *
- * SPDX-License-Identifier: LGPL-2-or-later
+ * SPDX-License-Identifier: LGPL-2.0-or-later
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -25,6 +25,8 @@
 
 /* A small implementation of TAP */
 static unsigned int test_number = 0;
+
+__attribute__((format(printf, 1, 2)))
 static void
 ok (const char *format, ...)
 {
@@ -199,8 +201,8 @@ test_has_path_prefix (void)
 }
 
 int
-main (int argc,
-      char **argv)
+main (int argc UNUSED,
+      char **argv UNUSED)
 {
   setvbuf (stdout, NULL, _IONBF, 0);
   test_n_elements ();

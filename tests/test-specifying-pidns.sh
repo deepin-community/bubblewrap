@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -xeuo pipefail
 
@@ -16,6 +16,7 @@ else
     while ! test -f sandbox-pidns; do sleep 1; done
     SANDBOX1PID=$(extract_child_pid info.json)
 
+    ASAN_OPTIONS=detect_leaks=0 LSAN_OPTIONS=detect_leaks=0 \
     $RUN --userns 11 --pidns 12 readlink /proc/self/ns/pid > sandbox2-pidns 11< /proc/$SANDBOX1PID/ns/user 12< /proc/$SANDBOX1PID/ns/pid
     echo foo > donepipe
 
