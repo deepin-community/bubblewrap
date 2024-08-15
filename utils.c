@@ -1,5 +1,6 @@
 /* bubblewrap
  * Copyright (C) 2016 Alexander Larsson
+ * SPDX-License-Identifier: LGPL-2.0-or-later
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -18,6 +19,8 @@
 #include "config.h"
 
 #include "utils.h"
+#include <limits.h>
+#include <stdint.h>
 #include <sys/syscall.h>
 #include <sys/socket.h>
 #ifdef HAVE_SELINUX
@@ -31,21 +34,56 @@
 #define security_check_context(x) security_check_context ((security_context_t) x)
 #endif
 
+__attribute__((format(printf, 1, 0))) static void
+warnv (const char *format,
+       va_list args,
+       const char *detail)
+{
+  fprintf (stderr, "bwrap: ");
+  vfprintf (stderr, format, args);
+
+  if (detail != NULL)
+    fprintf (stderr, ": %s", detail);
+
+  fprintf (stderr, "\n");
+}
+
+void
+warn (const char *format, ...)
+{
+  va_list args;
+
+  va_start (args, format);
+  warnv (format, args, NULL);
+  va_end (args);
+}
+
 void
 die_with_error (const char *format, ...)
 {
   va_list args;
   int errsv;
 
-  fprintf (stderr, "bwrap: ");
+  errsv = errno;
+
+  va_start (args, format);
+  warnv (format, args, strerror (errsv));
+  va_end (args);
+
+  exit (1);
+}
+
+void
+die_with_mount_error (const char *format, ...)
+{
+  va_list args;
+  int errsv;
 
   errsv = errno;
 
   va_start (args, format);
-  vfprintf (stderr, format, args);
+  warnv (format, args, mount_strerror (errsv));
   va_end (args);
-
-  fprintf (stderr, ": %s\n", strerror (errsv));
 
   exit (1);
 }
@@ -55,19 +93,15 @@ die (const char *format, ...)
 {
   va_list args;
 
-  fprintf (stderr, "bwrap: ");
-
   va_start (args, format);
-  vfprintf (stderr, format, args);
+  warnv (format, args, NULL);
   va_end (args);
-
-  fprintf (stderr, "\n");
 
   exit (1);
 }
 
 void
-die_unless_label_valid (const char *label)
+die_unless_label_valid (UNUSED const char *label)
 {
 #ifdef HAVE_SELINUX
   if (is_selinux_enabled () == 1)
@@ -111,9 +145,9 @@ xmalloc (size_t size)
 }
 
 void *
-xcalloc (size_t size)
+xcalloc (size_t nmemb, size_t size)
 {
-  void *res = calloc (1, size);
+  void *res = calloc (nmemb, size);
 
   if (res == NULL)
     die_oom ();
@@ -123,9 +157,13 @@ xcalloc (size_t size)
 void *
 xrealloc (void *ptr, size_t size)
 {
-  void *res = realloc (ptr, size);
+  void *res;
 
-  if (size != 0 && res == NULL)
+  assert (size != 0);
+
+  res = realloc (ptr, size);
+
+  if (res == NULL)
     die_oom ();
   return res;
 }
@@ -553,7 +591,6 @@ load_file_data (int     fd,
   ssize_t data_read;
   ssize_t data_len;
   ssize_t res;
-  int errsv;
 
   data_read = 0;
   data_len = 4080;
@@ -563,6 +600,12 @@ load_file_data (int     fd,
     {
       if (data_len == data_read + 1)
         {
+          if (data_len > SSIZE_MAX / 2)
+            {
+              errno = EFBIG;
+              return NULL;
+            }
+
           data_len *= 2;
           data = xrealloc (data, data_len);
         }
@@ -572,12 +615,7 @@ load_file_data (int     fd,
       while (res < 0 && errno == EINTR);
 
       if (res < 0)
-        {
-          errsv = errno;
-          close (fd);
-          errno = errsv;
-          return NULL;
-        }
+        return NULL;
 
       data_read += res;
     }
@@ -657,7 +695,7 @@ ensure_dir (const char *path,
 /* Sets errno on error (!= 0) */
 int
 mkdir_with_parents (const char *pathname,
-                    int         mode,
+                    mode_t      mode,
                     bool        create_last)
 {
   cleanup_free char *fn = NULL;
@@ -764,7 +802,7 @@ read_pid_from_socket (int socket)
   msg.msg_controllen = control_len_rcv;
 
   if (recvmsg (socket, &msg, 0) < 0)
-    die_with_error ("Cant read pid from socket");
+    die_with_error ("Can't read pid from socket");
 
   if (msg.msg_controllen <= 0)
     die ("Unexpected short read from pid socket");
@@ -794,13 +832,15 @@ readlink_malloc (const char *pathname)
 
   do
     {
+      if (size > SIZE_MAX / 2)
+        die ("Symbolic link target pathname too long");
       size *= 2;
       value = xrealloc (value, size);
       n = readlink (pathname, value, size - 1);
       if (n < 0)
         return NULL;
     }
-  while (size - 2 < n);
+  while (size - 2 < (size_t)n);
 
   value[n] = 0;
   return steal_pointer (&value);
@@ -812,6 +852,14 @@ get_oldroot_path (const char *path)
   while (*path == '/')
     path++;
   return strconcat ("/oldroot/", path);
+}
+
+char *
+get_newroot_path (const char *path)
+{
+  while (*path == '/')
+    path++;
+  return strconcat ("/newroot/", path);
 }
 
 int
@@ -839,7 +887,7 @@ pivot_root (const char * new_root, const char * put_old)
 }
 
 char *
-label_mount (const char *opt, const char *mount_label)
+label_mount (const char *opt, UNUSED const char *mount_label)
 {
 #ifdef HAVE_SELINUX
   if (mount_label)
@@ -856,7 +904,7 @@ label_mount (const char *opt, const char *mount_label)
 }
 
 int
-label_create_file (const char *file_label)
+label_create_file (UNUSED const char *file_label)
 {
 #ifdef HAVE_SELINUX
   if (is_selinux_enabled () > 0 && file_label)
@@ -866,11 +914,32 @@ label_create_file (const char *file_label)
 }
 
 int
-label_exec (const char *exec_label)
+label_exec (UNUSED const char *exec_label)
 {
 #ifdef HAVE_SELINUX
   if (is_selinux_enabled () > 0 && exec_label)
     return setexeccon (exec_label);
 #endif
   return 0;
+}
+
+/*
+ * Like strerror(), but specialized for a failed mount(2) call.
+ */
+const char *
+mount_strerror (int errsv)
+{
+  switch (errsv)
+    {
+      case ENOSPC:
+        /* "No space left on device" misleads users into thinking there
+         * is some sort of disk-space problem, but mount(2) uses that
+         * errno value to mean something more like "limit exceeded". */
+        return ("Limit exceeded (ENOSPC). "
+                "(Hint: Check that /proc/sys/fs/mount-max is sufficient, "
+                "typically 100000)");
+
+      default:
+        return strerror (errsv);
+    }
 }
