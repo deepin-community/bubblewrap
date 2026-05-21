@@ -1,1 +1,3 @@
+CVE-2026-41163/Don-t-run-the-privilege-separated-code-dumpable.patch
+CVE-2026-41163/fix-harden-privsep-parent-against-unexpected-operations.patch
 debian/Change-EPERM-error-message-to-show-Debian-specific-inform.patch
