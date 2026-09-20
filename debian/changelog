@@ -1,3 +1,21 @@
+bubblewrap (0.11.0-2+deb13u1deepin1) unstable; urgency=medium
+
+  [ deepin-ci-robot ]
+  * fix(cve): CVE-2026-87766 (high) - setup: Use O_PATH fds and
+    disalllow symlink targest   Upstream:
+    https://github.com/containers/bubblewrap/commit/c77dd38ebe75b4eabec3
+    c9349d7099287886eeec
+
+  [ lichenggang ]
+  * Backport the upstream fix following upstream's approach: resolve every
+    setup path inside /newroot and /oldroot with safe_openat(), and make
+    bind mounts through bind_mount_fd() on the O_PATH fd that was opened
+    and checked with O_NOFOLLOW, so that a symlink in the new root can no
+    longer redirect file and directory creation onto the host through
+    /oldroot.  Includes upstream's test-sandbox.py suite.
+
+ -- deepin-ci-robot <packages@deepin.org>  Fri, 11 Sep 2026 01:19:23 +0800
+
 bubblewrap (0.11.0-2+deb13u1) trixie; urgency=medium
 
   * d/control, d/gbp.conf: Branch for Debian 13 stable updates
